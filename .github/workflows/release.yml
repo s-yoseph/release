@@ -36,51 +36,48 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Publish latest draft release (safe)
+      - name: Publish latest draft release safely
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             const { owner, repo } = context.repo;
-            const releases = (await github.rest.repos.listReleases({
-              owner,
-              repo,
-              per_page: 100
-            })).data;
 
-            const draft = releases.find(r => r.draft);
+            // List all releases
+            const releasesResp = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            const releases = releasesResp.data;
+
+            // Find the most recent draft for develop
+            const draft = releases
+              .filter(r => r.draft && r.tag_name.endsWith('-develop'))
+              .sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
+
             if (!draft) {
-              core.info("❌ No draft release found to publish.");
+              core.info("❌ No develop draft release found.");
               return;
             }
 
-            // Check if a published release already has the same tag
+            // Check if a release with the same tag already exists
             const duplicate = releases.find(r => !r.draft && r.tag_name === draft.tag_name);
             if (duplicate) {
-              core.warning(`⚠️ A published release with tag "${draft.tag_name}" already exists. Skipping publish.`);
+              core.info(`⚠️ Release with tag "${draft.tag_name}" already exists. Skipping publish.`);
               return;
             }
 
+            // Publish the draft
             try {
               await github.rest.repos.updateRelease({
                 owner,
                 repo,
                 release_id: draft.id,
                 draft: false,
-                prerelease: false
+                prerelease: true
               });
-              core.info(`✅ Draft release "${draft.tag_name}" published successfully!`);
+              core.info(`✅ Published develop draft "${draft.tag_name}" successfully!`);
             } catch (error) {
               core.setFailed(`❌ Failed to publish release: ${error.message}`);
               throw error;
             }
 
-      - name: Regenerate next draft after publish
-        if: success()
-        uses: release-drafter/release-drafter@v6
-        with:
-          config-name: release-drafter.yml
-          commitish: develop
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Optional: skip auto-creating a new draft to avoid duplication
