@@ -1,5 +1,6 @@
 name-template: 'v$RESOLVED_VERSION-develop'
-tag-template: 'v$RESOLVED_VERSION-develop'
+tag-template: 'v$RESOLVED_VERSION'
+prerelease: true
 
 template: |
   # What's Changed
