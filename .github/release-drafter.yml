@@ -1,6 +1,7 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 prerelease: true
+include-pre-releases: true 
 
 template: |
   # What's Changed
