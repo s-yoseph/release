@@ -52,7 +52,6 @@ jobs:
                 repo: context.repo.repo,
                 release_id: draft.id,
                 draft: false
-                prerelease: true
               });
               console.log(`✅ Draft release "${draft.tag_name}" published successfully!`);
             } catch (error) {
