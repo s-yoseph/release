@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: release-drafter/release-drafter@v6.0.0
+      - uses: release-drafter/release-drafter@v6.0.0  # Pinned to avoid v6.1.0 bug
         with:
           config-name: release-drafter.yml
           commitish: develop
@@ -53,7 +53,7 @@ jobs:
                 repo: context.repo.repo,
                 release_id: draft.id,
                 draft: false,
-                prerelease: true  // Marks as pre-release; change to false for full release
+                prerelease: true  // Ensures published as pre-release
               });
               console.log(`✅ Draft release "${draft.tag_name}" published successfully!`);
             } catch (error) {
