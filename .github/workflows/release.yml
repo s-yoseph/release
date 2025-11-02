@@ -1,18 +1,22 @@
 name: Release Drafter and Publisher
 on:
   pull_request:
-    types: [opened, reopened, synchronize, closed]
+    types: [closed]
     branches:
       - develop
 permissions:
   contents: write
   pull-requests: write
+concurrency:
+  group: release-drafter
+  cancel-in-progress: true
 jobs:
   update_release_draft:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: release-drafter/release-drafter@v6
+      - uses: release-drafter/release-drafter@v6.0.0
         with:
           config-name: release-drafter.yml
           commitish: develop
@@ -20,8 +24,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   publish_draft:
     if: >
-      github.event_name == 'pull_request' &&
-      github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&
       contains(github.event.pull_request.labels.*.name, 'Publish')
     needs: update_release_draft
@@ -49,8 +51,8 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 release_id: draft.id,
-                draft: false,
-                prerelease: false
+                draft: false
+                prerelease: true
               });
               console.log(`✅ Draft release "${draft.tag_name}" published successfully!`);
             } catch (error) {
