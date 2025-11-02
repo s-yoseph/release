@@ -1,5 +1,6 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
+prerelease-identifier: 'develop'  # Key change: Appends -develop.$BUILD_NUMBER
 prerelease: true
 include-pre-releases: true 
 
