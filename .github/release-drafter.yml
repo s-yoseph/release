@@ -1,5 +1,5 @@
-name-template: 'v$RESOLVED_VERSION-develop'
-tag-template: 'v$RESOLVED_VERSION-develop'
+name-template: 'v$RESOLVED_VERSION-develop.$BUILD_NUMBER'
+tag-template: 'v$RESOLVED_VERSION-develop.$BUILD_NUMBER'
 prerelease: true
 include-pre-releases: true 
 
