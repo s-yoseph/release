@@ -1,0 +1,21 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+prerelease: false
+
+include-pre-releases: false
+
+version-resolver:
+  major:
+    labels: ['Major']
+  minor:
+    labels: ['Enhancement', 'Feature', 'Dev Task']
+  patch:
+    labels: ['Bug', 'Hot Fix', 'Task']
+  default: patch
+
+exclude-labels:
+  - 'Skip-Changelog'
+
+template: |
+  ## ✅ Stable Release (Main)
+  $CHANGES
