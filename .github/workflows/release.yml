@@ -1,59 +1,124 @@
 name: Release Drafter and Publisher
 
 on:
+  # PR events we care about (open/update/close)
   pull_request:
-    types: [closed]
+    types: [opened, reopened, synchronize, closed]
     branches:
       - develop
       - main
+
+  # Manual test trigger
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release-drafter
+  cancel-in-progress: true
+
 jobs:
-  release:
-    if: github.event.pull_request.merged == true
+  # -------------------------
+  # Debug: always helpful to see the event context
+  # -------------------------
+  debug:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Determine config based on branch
-        id: cfg
+      - name: Show event info
         run: |
-          if [[ "${{ github.event.pull_request.base.ref }}" == "develop" ]]; then
-            echo "config=release-drafter-develop.yml" >> $GITHUB_OUTPUT
-            echo "pre=true" >> $GITHUB_OUTPUT
-          else
-            echo "config=release-drafter-main.yml" >> $GITHUB_OUTPUT
-            echo "pre=false" >> $GITHUB_OUTPUT
-          fi
+          echo "GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME:-$GITHUB_EVENT_NAME}"
+          echo "EVENT_ACTION=${{ github.event.action || 'none' }}"
+          echo "REF=${{ github.ref || 'none' }}"
+          echo "BASE_REF=${{ github.event.pull_request && github.event.pull_request.base && github.event.pull_request.base.ref || 'none' }}"
+          echo "HEAD_REF=${{ github.event.pull_request && github.event.pull_request.head && github.event.pull_request.head.ref || 'none' }}"
+          echo "EVENT_FILE=/github/workflow/event.json"
+          jq . /github/workflow/event.json || true
 
-      - name: Run Release Drafter
+  # -------------------------
+  # Update draft when PR is opened/updated (not on closed)
+  # -------------------------
+  update_release_draft:
+    # only run on pull_request events that are NOT 'closed'
+    if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+    runs-on: ubuntu-latest
+    needs: debug
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run Release Drafter (branch-aware)
         uses: release-drafter/release-drafter@v6
         with:
-          config-name: ${{ steps.cfg.outputs.config }}
+          # We'll choose config file dynamically via commitish in publish step.
+          config-name: ${{ github.event.pull_request && github.event.pull_request.base && github.event.pull_request.base.ref == 'develop' && 'release-drafter-develop.yml' || 'release-drafter-main.yml' }}
+          commitish: ${{ github.event.pull_request && github.event.pull_request.base && github.event.pull_request.base.ref || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish Release
+  # -------------------------
+  # Publish when PR is merged (closed + merged == true)
+  # -------------------------
+  publish_release:
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    needs: update_release_draft
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Select branch and config
+        id: select
+        run: |
+          BRANCH="${{ github.event.pull_request.base.ref }}"
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+          if [ "$BRANCH" = "develop" ]; then
+            echo "config=release-drafter-develop.yml" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "config=release-drafter-main.yml" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Release Drafter with proper config (ensures draft exists/updated)
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: ${{ steps.select.outputs.config }}
+          commitish: ${{ steps.select.outputs.branch }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the draft release (latest draft)
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            const {owner, repo} = context.repo;
-            const releases = await github.rest.repos.listReleases({ owner, repo });
-            const draft = releases.find(r => r.draft === true);
+            const { owner, repo } = context.repo;
 
-            if (!draft) return console.log("No draft to publish.");
+            // Get the latest draft release (Release Drafter keeps one draft per target commitish)
+            const releasesRes = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            const drafts = releasesRes.data.filter(r => r.draft === true);
+
+            if (drafts.length === 0) {
+              core.setFailed("No draft release found to publish.");
+              return;
+            }
+
+            // Try to find a draft whose target_commitish matches the base branch,
+            // otherwise fall back to the most recent draft.
+            const baseBranch = "${{ steps.select.outputs.branch }}";
+            let draft = drafts.find(d => d.target_commitish === baseBranch) || drafts[0];
+
+            const prereleaseFlag = ${{ steps.select.outputs.prerelease == 'true' && 'true' || 'false' }};
 
             await github.rest.repos.updateRelease({
               owner,
               repo,
               release_id: draft.id,
               draft: false,
-              prerelease: ${{ steps.cfg.outputs.pre }}
+              prerelease: prereleaseFlag === 'true'
             });
 
-            console.log("✅ Published release for branch:", "${{ github.event.pull_request.base.ref }}");
+            console.log(`Published release ${draft.tag_name} (prerelease=${prereleaseFlag}) for branch ${baseBranch}`);
