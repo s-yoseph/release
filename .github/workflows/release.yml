@@ -2,92 +2,58 @@ name: Release Drafter and Publisher
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, closed]
+    types: [closed]
     branches:
       - develop
       - main
-  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
-concurrency:
-  group: release-drafter
-  cancel-in-progress: true
-
 jobs:
-  update_release_draft:
-    if: github.event.action != 'closed' || github.event.pull_request.merged == true
+  release:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Determine config based on branch
+        id: cfg
+        run: |
+          if [[ "${{ github.event.pull_request.base.ref }}" == "develop" ]]; then
+            echo "config=release-drafter-develop.yml" >> $GITHUB_OUTPUT
+            echo "pre=true" >> $GITHUB_OUTPUT
+          else
+            echo "config=release-drafter-main.yml" >> $GITHUB_OUTPUT
+            echo "pre=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Run Release Drafter
         uses: release-drafter/release-drafter@v6
         with:
-          config-name: release-drafter.yml
-          commitish: ${{ github.ref_name }}  # dynamically use branch name
+          config-name: ${{ steps.cfg.outputs.config }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish_draft:
-    if: >
-      github.event.action == 'closed' &&
-      github.event.pull_request.merged == true &&
-      (
-        contains(github.event.pull_request.labels.*.name, 'Publish') ||
-        github.ref_name == 'develop' || github.ref_name == 'main'
-      )
-    needs: update_release_draft
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Publish draft release
+      - name: Publish Release
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            const { owner, repo } = context.repo;
-
-            // Fetch draft releases for this branch
+            const {owner, repo} = context.repo;
             const releases = await github.rest.repos.listReleases({ owner, repo });
-            let draft = releases.data.find(r => r.draft && r.target_commitish === context.ref_name);
+            const draft = releases.find(r => r.draft === true);
 
-            // If no draft exists for this branch, create one
-            if (!draft) {
-              console.log(`No draft found for branch ${context.ref_name}, creating one...`);
-              const created = await github.rest.repos.createRelease({
-                owner,
-                repo,
-                tag_name: `v0.0.0-${context.ref_name}`, // temporary, Release Drafter will update
-                name: `Draft Release (${context.ref_name})`,
-                body: 'Automatically created draft by Release Drafter',
-                draft: true,
-                prerelease: context.ref_name === 'develop'
-              });
-              draft = created.data;
-            }
+            if (!draft) return console.log("No draft to publish.");
 
-            // Determine branch type
-            const branch = context.ref.replace('refs/heads/', '');
-            const isDevelop = branch === 'develop';
-            const isMain = branch === 'main';
-
-            console.log(`📦 Found or created draft: ${draft.tag_name}`);
-            console.log(`🔖 Publishing as ${isDevelop ? 'pre-release' : 'stable'}...`);
-
-            // Publish release
             await github.rest.repos.updateRelease({
               owner,
               repo,
               release_id: draft.id,
               draft: false,
-              prerelease: isDevelop
+              prerelease: ${{ steps.cfg.outputs.pre }}
             });
 
-            console.log(`✅ Published ${isDevelop ? 'pre-release' : 'stable'} release: ${draft.tag_name}`);
+            console.log("✅ Published release for branch:", "${{ github.event.pull_request.base.ref }}");
