@@ -1,0 +1,23 @@
+name: Publish Release
+
+on:
+  pull_request:
+    types: [closed, labeled]
+
+permissions:
+  contents: write
+
+jobs:
+  publish_release:
+    if: ${{ github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'Publish') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish Release Draft
+        uses: release-drafter/release-drafter@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          config-name: ${{ github.event.pull_request.base.ref == 'develop' && '.github/release-drafter-develop.yml' || '.github/release-drafter-main.yml' }}
+          publish: true
