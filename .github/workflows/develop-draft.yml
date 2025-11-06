@@ -19,5 +19,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          config-name: release/.github/release-drafter-develop.yml
+          config-name: .github/release-drafter-develop.yml
           publish: false
