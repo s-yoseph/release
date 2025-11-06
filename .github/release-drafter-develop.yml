@@ -1,7 +1,9 @@
 name-template: 'v$RESOLVED_VERSION-dev'
 tag-template: 'v$RESOLVED_VERSION-dev'
 prerelease: true
-
+include-pre-releases: true
+search-labels:
+  - '/^v\d+\.\d+\.\d+-dev$/'
 version-resolver:
   major:
     labels: ['Major']
@@ -10,10 +12,8 @@ version-resolver:
   patch:
     labels: ['Bug', 'Hot Fix', 'Task']
   default: patch
-
 exclude-labels:
   - 'Skip-Changelog'
-
 template: |
   ## 🚀 Pre-release (Develop)
   $CHANGES
