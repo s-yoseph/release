@@ -1,27 +1,30 @@
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
 prerelease: false
 include-pre-releases: false
-search-labels:
-  - 'v[0-9]+\.[0-9]+\.[0-9]+(?!-)'
+
 categories:
-  - title: 'Major Changes'
-    labels: ['Major']
-  - title: 'Features'
-    labels: ['Enhancement', 'Feature', 'Dev Task']
-  - title: 'Bug Fixes'
-    labels: ['Bug', 'Hot Fix', 'Task']
+  - title: "🚀 Major Changes"
+    labels: ["Major"]
+  - title: "✨ Features"
+    labels: ["Enhancement", "Feature", "Dev Task"]
+  - title: "🐛 Bug Fixes"
+    labels: ["Bug", "Hot Fix", "Task"]
+
 version-resolver:
   major:
-    labels: ['Major']
+    labels: ["Major"]
   minor:
-    labels: ['Enhancement', 'Feature', 'Dev Task']
+    labels: ["Enhancement", "Feature", "Dev Task"]
   patch:
-    labels: ['Bug', 'Hot Fix', 'Task']
+    labels: ["Bug", "Hot Fix", "Task"]
   default: patch
+
 exclude-labels:
-  - 'Skip-Changelog'
+  - "Skip-Changelog"
+
 template: |
-  ## ✅ Stable Release (Main)
-  
+  ## ✅ Stable Release
+
   $CHANGES
