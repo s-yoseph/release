@@ -1,8 +1,8 @@
-name: Release Drafter (Develop)
+name: Release Drafter Develop
 
 on:
   pull_request:
-    types: [closed]
+    types: [closed, labeled]
     branches: [develop]
 
 permissions:
@@ -10,16 +10,26 @@ permissions:
   pull-requests: write
 
 jobs:
-  update_release_draft_dev:
+  release:
     if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update Pre-release Draft
+      - name: Update Draft
         uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter-develop.yml
-          publish: false
+          commitish: develop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Draft if Labeled
+        if: ${{ contains(github.event.pull_request.labels.*.name, 'Publish') }}
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-develop.yml
+          commitish: develop
+          publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
