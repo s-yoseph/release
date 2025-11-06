@@ -1,8 +1,8 @@
-name-template: "v$RESOLVED_VERSION"
-tag-template: "v$RESOLVED_VERSION"
+name-template: "dev-v$RESOLVED_VERSION"
+tag-template: "dev-v$RESOLVED_VERSION"
 
-prerelease: false
-include-pre-releases: false
+prerelease: true
+include-pre-releases: true
 
 categories:
   - title: "🚀 Major Changes"
@@ -25,6 +25,5 @@ exclude-labels:
   - "Skip-Changelog"
 
 template: |
-  ## ✅ Stable Release
-
+  ## 🚧 Develop Pre-Release
   $CHANGES
