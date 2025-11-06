@@ -1,8 +1,8 @@
-name: Release Drafter (Main)
+name: Release Drafter Main
 
 on:
   pull_request:
-    types: [closed]
+    types: [closed, labeled]
     branches: [main]
 
 permissions:
@@ -10,16 +10,26 @@ permissions:
   pull-requests: write
 
 jobs:
-  update_release_draft_main:
+  release:
     if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update Stable Release Draft
+      - name: Update Stable Draft
         uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter-main.yml
-          publish: false
+          commitish: main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Draft if Labeled
+        if: ${{ contains(github.event.pull_request.labels.*.name, 'Publish') }}
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter-main.yml
+          commitish: main
+          publish: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
