@@ -14,10 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Config File
+        id: config
+        run: |
+          if [ "${{ github.event.pull_request.base.ref }}" == "develop" ]; then
+            echo "config=.github/release-drafter-develop.yml" >> $GITHUB_OUTPUT
+          else
+            echo "config=.github/release-drafter-main.yml" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish Release Draft
         uses: release-drafter/release-drafter@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          config-name: ${{ github.event.pull_request.base.ref == 'develop' && '.github/release-drafter-develop.yml' || '.github/release-drafter-main.yml' }}
+          config-name: ${{ steps.config.outputs.config }}
           publish: true
