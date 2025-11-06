@@ -51,7 +51,6 @@ jobs:
       - name: Run Release Drafter (branch-aware)
         uses: release-drafter/release-drafter@v6
         with:
-          # We'll choose config file dynamically via commitish in publish step.
           config-name: ${{ github.event.pull_request && github.event.pull_request.base && github.event.pull_request.base.ref == 'develop' && 'release-drafter-develop.yml' || 'release-drafter-main.yml' }}
           commitish: ${{ github.event.pull_request && github.event.pull_request.base && github.event.pull_request.base.ref || github.ref_name }}
         env:
@@ -96,8 +95,9 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
+            const baseBranch = "${{ steps.select.outputs.branch }}";
+            const isPrerelease = "${{ steps.select.outputs.prerelease }}" === 'true';
 
-            // Get the latest draft release (Release Drafter keeps one draft per target commitish)
             const releasesRes = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
             const drafts = releasesRes.data.filter(r => r.draft === true);
 
@@ -106,19 +106,26 @@ jobs:
               return;
             }
 
-            // Try to find a draft whose target_commitish matches the base branch,
-            // otherwise fall back to the most recent draft.
-            const baseBranch = "${{ steps.select.outputs.branch }}";
-            let draft = drafts.find(d => d.target_commitish === baseBranch) || drafts[0];
+            // Find draft matching the target branch AND the correct pre-release status
+            let draft = drafts.find(d => 
+              d.target_commitish === baseBranch && 
+              d.prerelease === isPrerelease
+            );
 
-            const prereleaseFlag = ${{ steps.select.outputs.prerelease == 'true' && 'true' || 'false' }};
+            // Fallback: if exact match not found, use the most recent draft for this branch
+            if (!draft) {
+              draft = drafts.find(d => d.target_commitish === baseBranch) || drafts[0];
+            }
+
+            // Verify we're publishing the right release
+            console.log(`Found draft: ${draft.tag_name} (prerelease=${draft.prerelease}, branch=${draft.target_commitish})`);
 
             await github.rest.repos.updateRelease({
               owner,
               repo,
               release_id: draft.id,
               draft: false,
-              prerelease: prereleaseFlag === 'true'
+              prerelease: isPrerelease
             });
 
-            console.log(`Published release ${draft.tag_name} (prerelease=${prereleaseFlag}) for branch ${baseBranch}`);
+            console.log(`✅ Published release ${draft.tag_name} (prerelease=${isPrerelease}) for branch ${baseBranch}`);
