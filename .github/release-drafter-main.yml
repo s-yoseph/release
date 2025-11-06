@@ -2,6 +2,8 @@ name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 prerelease: false
 include-pre-releases: false
+search-labels:
+  - 'v[0-9]+\.[0-9]+\.[0-9]+(?!-)'
 categories:
   - title: 'Major Changes'
     labels: ['Major']
