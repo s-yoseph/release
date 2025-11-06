@@ -1,9 +1,9 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 prerelease: false
-
 include-pre-releases: false
-
+search-labels:
+  - '/^v\d+\.\d+\.\d+$/'
 version-resolver:
   major:
     labels: ['Major']
@@ -12,10 +12,8 @@ version-resolver:
   patch:
     labels: ['Bug', 'Hot Fix', 'Task']
   default: patch
-
 exclude-labels:
   - 'Skip-Changelog'
-
 template: |
   ## ✅ Stable Release (Main)
   $CHANGES
