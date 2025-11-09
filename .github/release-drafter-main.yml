@@ -1,5 +1,7 @@
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
+name-template: "Release v$NEXT_PATCH"
+tag-template: "v$NEXT_PATCH"
+version-template: "v$NEXT_PATCH"
+
 
 template: |
   # What's Changed
