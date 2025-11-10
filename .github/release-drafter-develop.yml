@@ -14,6 +14,9 @@ version-resolver:
 exclude-labels:
   - 'Skip-Changelog'
 
+required-labels:
+  - Publish
+
 template: |
   ## 🚀 Pre-release (develop)
   $CHANGES
