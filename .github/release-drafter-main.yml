@@ -1,19 +1,18 @@
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
-prerelease: false
-
-version-resolver:
-  major:
-    labels: ['Major']
-  minor:
-    labels: ['Enhancement', 'Feature', 'Dev Task']
-  patch:
-    labels: ['Bug', 'Hot Fix', 'Task']
-  default: patch
+name-template: "v$NEXT_PATCH_VERSION"
+tag-template: "v$NEXT_PATCH_VERSION"
+categories:
+  - title: "🚀 Enhancements"
+    labels:
+      - enhancement
+  - title: "🐛 Bug Fixes"
+    labels:
+      - bug
 
 exclude-labels:
-  - 'Skip-Changelog'
+  - skip-release
 
-template: |
-  ## ✅ Stable Release (main)
-  $CHANGES
+required-labels:
+  - Publish
+
+change-template: "- $TITLE (#$NUMBER)"
+no-changes-template: "- No changes"
