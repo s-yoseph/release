@@ -1,0 +1,78 @@
+name: Release Publisher
+on:
+  pull_request:
+    types: [closed]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  publish-release:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'Publish')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate and Publish Release
+        uses: actions/github-script@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          script: |
+            const branch = context.payload.pull_request.base.ref;
+            let config, suffix, prerelease;
+            if (branch === 'develop') {
+              config = 'release-drafter-develop.yml';
+              suffix = '-dev';
+              prerelease = true;
+            } else if (branch === 'main') {
+              config = 'release-drafter-main.yml';
+              suffix = '';
+              prerelease = false;
+            } else {
+              return;
+            }
+            // Find last tag matching the suffix
+            const tagsResponse = await github.rest.repos.listTags({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const matchingTags = tagsResponse.data
+              .filter(t => t.name.match(new RegExp(`^v\\d+\\.\\d+\\.\\d+${suffix}$`)))
+              .map(t => ({name: t.name, commit: t.commit}));
+            let previousTag = null;
+            if (matchingTags.length > 0) {
+              matchingTags.sort((a, b) => {
+                const parse = (v) => v.replace('v', '').replace(suffix, '').split('.').map(Number);
+                const pa = parse(a.name);
+                const pb = parse(b.name);
+                for (let i = 0; i < 3; i++) {
+                  if (pa[i] > pb[i]) return 1;
+                  if (pa[i] < pb[i]) return -1;
+                }
+                return 0;
+              });
+              previousTag = matchingTags[matchingTags.length - 1].name;
+            }
+            // Generate notes
+            const generateParams = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: 'temp-tag', // Dummy value; not used in final release
+              configuration_file_path: `.github/${config}`,
+            };
+            if (previousTag) {
+              generateParams.previous_tag_name = previousTag;
+            }
+            const { data: { name, body } } = await github.rest.repos.generateReleaseNotes(generateParams);
+            // Extract tag from generated name (assuming name-template matches tag-template)
+            const newTag = name;
+            // Create release
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: newTag,
+              name: name,
+              body: body,
+              draft: false,
+              prerelease: prerelease,
+              target_commitish: branch,
+            });
