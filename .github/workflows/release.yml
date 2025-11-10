@@ -1,38 +1,43 @@
 name: Release Drafter and Publisher
+
 on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
     branches:
+      - develop
       - main
+
 permissions:
   contents: write
   pull-requests: write
+
 concurrency:
   group: release-drafter
   cancel-in-progress: true
+
 jobs:
   update_release_draft:
-    if: github.event.action != 'closed' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: release-drafter/release-drafter@v6.0.0
+      - name: Update Release Draft
+        uses: release-drafter/release-drafter@v6
         with:
-          config-name: release-drafter-main.yml
-          commitish: main
+          config-name: ${{ github.ref == 'refs/heads/main' && 'release-drafter-main.yml' || 'release-drafter-develop.yml' }}
+          commitish: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   publish_draft:
     if: >
+      github.event_name == 'pull_request' &&
       github.event.action == 'closed' &&
-      github.event.pull_request.merged == true &&
-      contains(github.event.pull_request.labels.*.name, 'Publish')
+      github.event.pull_request.merged == true
     needs: update_release_draft
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Publish latest draft release
+      - uses: actions/checkout@v4
+      - name: Publish draft release
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,21 +47,25 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo
             });
-            const draft = releases.data.find(r => r.draft);
+
+            // Find the draft for this branch
+            const branchName = context.ref.replace('refs/heads/', '');
+            const draft = releases.data.find(r => r.draft && r.target_commitish === branchName);
+
             if (!draft) {
-              core.setFailed("No draft release found to publish.");
+              core.setFailed("❌ No draft release found to publish for this branch.");
               return;
             }
-            try {
-              await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: draft.id,
-                draft: false,
-                prerelease: true
-              });
-              console.log(`✅ Draft release "${draft.tag_name}" published successfully!`);
-            } catch (error) {
-              core.setFailed(`Failed to publish release: ${error.message}`);
-              throw error;
-            }
+
+            // Pre-release only for develop
+            const isPre = branchName === 'develop';
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: draft.id,
+              draft: false,
+              prerelease: isPre
+            });
+
+            console.log(`✅ Published ${isPre ? 'pre-release' : 'stable release'}: ${draft.tag_name}`);
