@@ -18,15 +18,23 @@ jobs:
         with:
           script: |
             const branch = context.payload.pull_request.base.ref;
-            let config, suffix, prerelease;
+            let config, suffix, prerelease, majorLabels, minorLabels, patchLabels, excludeLabels;
             if (branch === 'develop') {
               config = 'release-drafter-develop.yml';
               suffix = '-dev';
               prerelease = true;
+              majorLabels = ['Major'];
+              minorLabels = ['Enhancement', 'Feature', 'Dev Task'];
+              patchLabels = ['Bug', 'Hot Fix', 'Task'];
+              excludeLabels = ['Skip-Changelog'];
             } else if (branch === 'main') {
               config = 'release-drafter-main.yml';
               suffix = '';
               prerelease = false;
+              majorLabels = ['Major'];
+              minorLabels = ['enhancement'];
+              patchLabels = ['bug'];
+              excludeLabels = ['skip-release'];
             } else {
               return;
             }
@@ -36,35 +44,83 @@ jobs:
               repo: context.repo.repo,
             });
             const matchingTags = tagsResponse.data
-              .filter(t => t.name.match(new RegExp(`^v\\d+\\.\\d+\\.\\d+${suffix}$`)))
+              .filter(t => t.name.match(new RegExp(`^v\\d+\\.\\d+\\.\\d+${suffix ? '\\' + suffix : ''}$`)))
               .map(t => ({name: t.name, commit: t.commit}));
             let previousTag = null;
+            let previousSha = null;
+            let previousDate = null;
             if (matchingTags.length > 0) {
               matchingTags.sort((a, b) => {
                 const parse = (v) => v.replace('v', '').replace(suffix, '').split('.').map(Number);
                 const pa = parse(a.name);
                 const pb = parse(b.name);
                 for (let i = 0; i < 3; i++) {
-                  if (pa[i] > pb[i]) return 1;
-                  if (pa[i] < pb[i]) return -1;
+                  if (pa[i] !== pb[i]) return pa[i] - pb[i];
                 }
                 return 0;
               });
               previousTag = matchingTags[matchingTags.length - 1].name;
+              previousSha = matchingTags[matchingTags.length - 1].commit.sha;
+              const previousCommit = await github.rest.git.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: previousSha
+              });
+              previousDate = previousCommit.data.committer.date;
             }
+            // Get merged PRs since previous
+            let query = `repo:${context.repo.owner}/${context.repo.repo} type:pr is:merged base:${branch}`;
+            if (previousDate) {
+              query += ` merged:>${previousDate}`;
+            }
+            const prs = await github.paginate(
+              github.rest.search.issuesAndPullRequests,
+              {
+                q: query,
+                per_page: 100
+              }
+            );
+            let allLabels = new Set();
+            for (const pr of prs) {
+              const labels = pr.labels.map(l => l.name);
+              if (labels.some(l => excludeLabels.includes(l))) continue;
+              labels.forEach(l => allLabels.add(l));
+            }
+            let bump = 'patch';
+            if ([...allLabels].some(l => majorLabels.includes(l))) {
+              bump = 'major';
+            } else if ([...allLabels].some(l => minorLabels.includes(l))) {
+              bump = 'minor';
+            }
+            // Calculate new version
+            let currentVersion = [0, 0, 0];
+            if (previousTag) {
+              const versionStr = previousTag.replace('v', '').replace(suffix, '');
+              currentVersion = versionStr.split('.').map(Number);
+            }
+            if (bump === 'major') {
+              currentVersion[0] += 1;
+              currentVersion[1] = 0;
+              currentVersion[2] = 0;
+            } else if (bump === 'minor') {
+              currentVersion[1] += 1;
+              currentVersion[2] = 0;
+            } else if (bump === 'patch') {
+              currentVersion[2] += 1;
+            }
+            const newVersion = currentVersion.join('.');
+            const newTag = `v${newVersion}${suffix}`;
             // Generate notes
             const generateParams = {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: 'temp-tag', // Dummy value; not used in final release
+              tag_name: newTag,
               configuration_file_path: `.github/${config}`,
             };
             if (previousTag) {
               generateParams.previous_tag_name = previousTag;
             }
             const { data: { name, body } } = await github.rest.repos.generateReleaseNotes(generateParams);
-            // Extract tag from generated name (assuming name-template matches tag-template)
-            const newTag = name;
             // Create release
             await github.rest.repos.createRelease({
               owner: context.repo.owner,
