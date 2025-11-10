@@ -1,50 +1,18 @@
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
-
-template: |
-  # What's Changed
-
-  $CHANGES
-
-  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
-
+name-template: "v$NEXT_PATCH_VERSION"
+tag-template: "v$NEXT_PATCH_VERSION"
 categories:
-  - title: 'Breaking Changes'
+  - title: "🚀 Enhancements"
     labels:
-      - 'Major'
-  - title: 'Enhancements'
+      - enhancement
+  - title: "🐛 Bug Fixes"
     labels:
-      - 'Enhancement'
-      - 'Dev Task'
-      - 'Feature'
-      - 'Dev Process Optimization'
-  - title: 'Bug Fixes'
-    labels:
-      - 'Bug'
-      - 'Hot Fix'
-  - title: 'Tasks'
-    labels:
-      - 'Task'
-
-change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
-
-version-resolver:
-  major:
-    labels: 
-      - 'Major'
-  minor:
-    labels:
-      - 'Enhancement'
-      - 'Dev Task'
-      - 'Feature'
-      - 'Dev Process Optimization'
-  patch:
-    labels:
-      - 'Bug'
-      - 'Hot Fix'
-      - 'Task'
-      - 'Security'
-  default: patch
+      - bug
 
 exclude-labels:
-  - 'Skip-Changelog'
+  - skip-release
+
+required-labels:
+  - Publish
+
+change-template: "- $TITLE (#$NUMBER)"
+no-changes-template: "- No changes"
