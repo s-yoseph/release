@@ -1,43 +1,27 @@
-name: Release Drafter and Publisher
+name: Release Drafter (Develop)
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
+  push:
     branches:
       - develop
-      - main
 
 permissions:
   contents: write
   pull-requests: write
 
-concurrency:
-  group: release-drafter
-  cancel-in-progress: true
-
 jobs:
-  update_release_draft:
+  draft-and-publish-prerelease:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Update Release Draft
-        uses: release-drafter/release-drafter@v6
+
+      - uses: release-drafter/release-drafter@v6
         with:
-          config-name: ${{ github.ref == 'refs/heads/main' && 'release-drafter-main.yml' || 'release-drafter-develop.yml' }}
-          commitish: ${{ github.ref_name }}
+          config-name: release-drafter-develop.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish_draft:
-    if: >
-      github.event_name == 'pull_request' &&
-      github.event.action == 'closed' &&
-      github.event.pull_request.merged == true
-    needs: update_release_draft
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Publish draft release
+      - name: Publish Pre-Release
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,27 +29,14 @@ jobs:
           script: |
             const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
-              repo: context.repo.repo
+              repo: context.repo.repo,
             });
-
-            // Find the draft for this branch
-            const branchName = context.ref.replace('refs/heads/', '');
-            const draft = releases.data.find(r => r.draft && r.target_commitish === branchName);
-
-            if (!draft) {
-              core.setFailed("❌ No draft release found to publish for this branch.");
-              return;
-            }
-
-            // Pre-release only for develop
-            const isPre = branchName === 'develop';
-
+            const draft = releases.data.find(r => r.draft);
+            if (!draft) return;
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: draft.id,
               draft: false,
-              prerelease: isPre
+              prerelease: true,
             });
-
-            console.log(`✅ Published ${isPre ? 'pre-release' : 'stable release'}: ${draft.tag_name}`);
