@@ -1,4 +1,5 @@
-name: Release Drafter
+name: Release Drafting and Publishing (PR/Push)
+
 on:
   push:
     branches:
@@ -15,78 +16,98 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Job for the 'develop' branch (Prerelease)
-  draft-and-publish-prerelease:
-    # Only run this job if the push was to the 'develop' branch
-    if: github.ref == 'refs/heads/develop'
+  # ----------------------------------------------------------------------
+  # 1. DRAFTING JOB (Triggers on Pull Request events only)
+  # This job creates/updates the draft release used to display the changelog in the PR description.
+  # ----------------------------------------------------------------------
+  draft:
+    # Only run on pull_request events
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      
+      - name: Determine Config Name
+        id: config_path
+        run: |
+          if [ "${{ github.base_ref }}" == "develop" ]; then
+            echo "config_name=release-drafter-develop.yml" >> $GITHUB_OUTPUT
+          else
+            echo "config_name=release-drafter-main.yml" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Draft Prerelease
+      - name: Draft Release
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: ${{ steps.config_path.outputs.config_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  # ----------------------------------------------------------------------
+  # 2. PUBLISHING PRE-RELEASE JOB (Triggers on Push/Merge to develop)
+  # Forces a unique draft creation and then publishes it immediately.
+  # ----------------------------------------------------------------------
+  publish-prerelease:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # Required for release-drafter
+      
+      - name: Create/Update Unique Draft (Prerelease)
+        id: create_draft
         uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter-develop.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish Pre-Release
-        uses: actions/github-script@v7
+      
+      - name: Publish Prerelease using Draft ID
+        # Uses the GitHub CLI to publish the release generated in the previous step
+        if: steps.create_draft.outputs.id
+        run: |
+          echo "Publishing release ${{ steps.create_draft.outputs.name }} (ID: ${{ steps.create_draft.outputs.id }})"
+          # Use gh CLI to update the draft, setting draft=false
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases/${{ steps.create_draft.outputs.id }} \
+            -f draft=false \
+            -f prerelease=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          script: |
-            // Find the most recent draft release with '-dev' in the tag name
-            const releases = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const draft = releases.data.find(r => r.draft && r.tag_name.includes('-dev'));
-            if (!draft) return;
-            
-            // Publish the draft as a prerelease
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: draft.id,
-              draft: false,
-              prerelease: true,
-            });
 
-  # Job for the 'main' branch (Release)
-  draft-and-publish-release:
-    # Only run this job if the push was to the 'main' branch
+  # ----------------------------------------------------------------------
+  # 3. PUBLISHING RELEASE JOB (Triggers on Push/Merge to main)
+  # Forces a draft creation and then publishes it immediately.
+  # ----------------------------------------------------------------------
+  publish-release:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Draft Release
+      - uses: actions/checkout@v4 # Required for release-drafter
+      
+      - name: Create/Update Draft (Final Release)
+        id: create_draft
         uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter-main.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish Release
-        uses: actions/github-script@v7
+      
+      - name: Publish Final Release using Draft ID
+        if: steps.create_draft.outputs.id
+        run: |
+          echo "Publishing release ${{ steps.create_draft.outputs.name }} (ID: ${{ steps.create_draft.outputs.id }})"
+          # Use gh CLI to update the draft, setting draft=false
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/releases/${{ steps.create_draft.outputs.id }} \
+            -f draft=false \
+            -f prerelease=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          script: |
-            // Find the most recent draft release without '-dev' in the tag name
-            const releases = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const draft = releases.data.find(r => r.draft && !r.tag_name.includes('-dev'));
-            if (!draft) return;
-            
-            // Publish the draft as a regular release
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: draft.id,
-              draft: false,
-              prerelease: false,
-            });
