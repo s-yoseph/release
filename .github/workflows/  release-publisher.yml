@@ -27,7 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          # --- CHANGE: Checkout the HEAD branch of the PR for stable commit history access ---
+          ref: ${{ github.event.pull_request.head.ref }}
       
       - name: Determine Config Name
         id: config_path
@@ -42,6 +43,9 @@ jobs:
         uses: release-drafter/release-drafter@v6
         with:
           config-name: ${{ steps.config_path.outputs.config_name }}
+          # --- ADDED: Explicitly tell Release Drafter the target merge commit ---
+          # This helps the action reliably build the changelog.
+          target-commitish: ${{ github.event.pull_request.merge_commit_sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
