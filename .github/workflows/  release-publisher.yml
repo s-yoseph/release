@@ -1,8 +1,13 @@
-name: Release Drafter
+name: Release Drafting and Publishing (PR/Push)
+
 on:
   push:
     branches:
-      # Trigger on pushes to both develop and main
+      - develop
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches:
       - develop
       - main
 
@@ -11,36 +16,72 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Job for the 'develop' branch (Prerelease)
-  draft-and-publish-prerelease:
-    # Only run this job if the push was to the 'develop' branch
-    if: github.ref == 'refs/heads/develop'
+  # ----------------------------------------------------------------------
+  # 1. DRAFTING JOB (Triggers on Pull Request events only)
+  # This job creates/updates the draft release used to display the changelog.
+  # ----------------------------------------------------------------------
+  draft:
+    # Only run on pull_request events
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        # Checkout the base branch (e.g., develop or main) to ensure we can access the correct config file
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      
+      # Determine which configuration file to use based on the target branch
+      - name: Determine Config Name
+        id: config_path
+        run: |
+          if [ "${{ github.base_ref }}" == "develop" ]; then
+            echo "config_name=release-drafter-develop.yml" >> $GITHUB_OUTPUT
+          else
+            echo "config_name=release-drafter-main.yml" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Draft Prerelease
+      - name: Draft Release
         uses: release-drafter/release-drafter@v6
         with:
-          config-name: release-drafter-develop.yml
+          # Use the config file name without the .github/ prefix (as per previous guidance)
+          config-name: ${{ steps.config_path.outputs.config_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  # ----------------------------------------------------------------------
+  # 2. PUBLISHING JOBS (Triggers on Push/Merge only)
+  # This job publishes the draft release when merged into 'develop'.
+  # ----------------------------------------------------------------------
 
+  publish-prerelease:
+    # Only run on push to 'develop' (e.g., after a PR merge)
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:      
       - name: Publish Pre-Release
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            // Find the most recent draft release with '-dev' in the tag name
+            // Find the most recent DRAFT release with '-dev' in the tag name
             const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
-            const draft = releases.data.find(r => r.draft && r.tag_name.includes('-dev'));
-            if (!draft) return;
             
+            // Find the most recent draft prerelease created by the drafter
+            const draft = releases.data.find(r => r.draft && r.tag_name.includes('-dev'));
+            
+            if (!draft) {
+              console.log('No eligible draft prerelease found to publish.');
+              return;
+            }
+
             // Publish the draft as a prerelease
+            // NOTE: If you still encounter the 'tag_name already_exists' error,
+            // you must adjust your release-drafter-develop.yml to use a unique tag 
+            // format on every push (e.g., adding a timestamp or commit SHA).
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -49,34 +90,33 @@ jobs:
               prerelease: true,
             });
 
-  # Job for the 'main' branch (Release)
-  draft-and-publish-release:
-    # Only run this job if the push was to the 'main' branch
+  # ----------------------------------------------------------------------
+  # 3. PUBLISHING JOBS (Triggers on Push/Merge only)
+  # This job publishes the draft release when merged into 'main'.
+  # ----------------------------------------------------------------------
+  publish-release:
+    # Only run on push to 'main' (e.g., after a PR merge)
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Draft Release
-        uses: release-drafter/release-drafter@v6
-        with:
-          config-name: release-drafter-main.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publish Release
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            // Find the most recent draft release without '-dev' in the tag name
+            // Find the most recent DRAFT release without '-dev' in the tag name
             const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
+            
             const draft = releases.data.find(r => r.draft && !r.tag_name.includes('-dev'));
-            if (!draft) return;
+            
+            if (!draft) {
+              console.log('No eligible draft release found to publish.');
+              return;
+            }
             
             // Publish the draft as a regular release
             await github.rest.repos.updateRelease({
