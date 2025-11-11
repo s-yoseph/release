@@ -49,8 +49,6 @@ jobs:
               prerelease: true,
             });
 
-  ---
-
   # Job for the 'main' branch (Release)
   draft-and-publish-release:
     # Only run this job if the push was to the 'main' branch
