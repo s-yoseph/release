@@ -22,7 +22,7 @@ jobs:
       - name: Draft Prerelease
         uses: release-drafter/release-drafter@v6
         with:
-          config-name: .github/release-drafter-develop.yml
+          config-name: release-drafter-develop.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -60,7 +60,7 @@ jobs:
       - name: Draft Release
         uses: release-drafter/release-drafter@v6
         with:
-          config-name: .github/release-drafter-main.yml
+          config-name: release-drafter-main.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
